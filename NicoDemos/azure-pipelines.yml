@@ -1,0 +1,58 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+resources:
+  webhooks:
+    - webhook: WorkItemCreateTrigger
+      connection: WorkItemCreate 
+
+pool:
+  vmImage: windows-latest
+
+steps:
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+            Install-Module -Name PSDevOps -force
+            import-module PSDevOps
+
+            Write-Host ${{ parameters.WorkItemCreateTrigger.id}}
+            Write-Host ${{ parameters.WorkItemCreateTrigger.eventType}}
+            Write-Host $(get-childitem env:messageText).value
+            Write-Host $(get-childitem env:messageMarkdown).value
+                        
+            $workItemIdString = $(get-childitem env:messageMarkdown).value -match '\d+'
+            $workItemId = $Matches[0]
+            write-host $workItemId
+            az boards work-item show --id $workItemId --org $(System.TeamFoundationCollectionUri)
+            write-host "-------"
+            get-childitem env:
+
+            write-host "-------"
+            $accessToken = $(get-childitem env:SYSTEM_ACCESSTOKEN).value
+            write-host $accessToken
+            $workitem = Get-ADOWorkItem -Organization Orschel -Project Demos -ID $workItemId -PersonalAccessToken $accessToken
+            write-host "Updating work item $workItem" -ForegroundColor Green
+            $oldValue = $workItem."Microsoft.VSTS.Scheduling.Effort";
+
+            Write-Host "Old effort: $($oldValue)"
+            $newValue = $oldValue + 2;
+
+            Write-Host "New effort: $($newValue)"
+
+            Set-ADOWorkItem -Organization Orschel -Project Demos -ID $workItemId -PersonalAccessToken $accessToken -InputObject @{
+                "Microsoft.VSTS.Scheduling.Effort" = $newValue}
+
+            Write-Host "Update was sucessfull." -ForegroundColor Green
+    pwsh: false
+  env:
+    messageText: ${{ parameters.WorkItemCreateTrigger.message.text}}
+    messageMarkdown: ${{ parameters.WorkItemCreateTrigger.message.markdown}}
+    #workItemId: ${{ parameters.WorkItemCreateTrigger.resource.fields.id}}
+    #workItemRev: ${{ parameters.WorkItemCreateTrigger.resource.fields.rev}}
+    AZURE_DEVOPS_EXT_PAT: $(System.AccessToken)
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
